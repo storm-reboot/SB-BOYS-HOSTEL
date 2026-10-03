@@ -1,0 +1,26 @@
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FF6B35"/>
+      <stop offset="100%" stop-color="#7B2FBE"/>
+    </linearGradient>
+    <clipPath id="round">
+      <rect width="128" height="128" rx="28.16" ry="28.16"/>
+    </clipPath>
+  </defs>
+  <rect width="128" height="128" rx="28.16" ry="28.16" fill="url(#g)"/>
+  <!-- Building -->
+  <g clip-path="url(#round)" fill="rgba(255,255,255,0.9)">
+    <rect x="38.4" y="32" width="51.2" height="57.6" rx="2"/>
+    <rect x="48.64" y="19.2" width="30.72" height="15.36" rx="2"/>
+    <!-- Windows -->
+    <rect x="46.08" y="40.96" width="12.8" height="10.24" rx="1" fill="rgba(15,10,30,0.5)"/>
+    <rect x="69.12" y="40.96" width="12.8" height="10.24" rx="1" fill="rgba(15,10,30,0.5)"/>
+    <rect x="46.08" y="58.88" width="12.8" height="10.24" rx="1" fill="rgba(15,10,30,0.5)"/>
+    <rect x="69.12" y="58.88" width="12.8" height="10.24" rx="1" fill="rgba(15,10,30,0.5)"/>
+    <!-- Camera circle -->
+    <circle cx="83.2" cy="83.2" r="23.04" fill="#0F0A1E" opacity="0.7"/>
+    <circle cx="83.2" cy="83.2" r="15.36" fill="none" stroke="white" stroke-width="3.2"/>
+    <circle cx="83.2" cy="83.2" r="6.4" fill="white"/>
+  </g>
+</svg>
