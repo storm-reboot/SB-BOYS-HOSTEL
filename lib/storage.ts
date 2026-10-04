@@ -16,13 +16,11 @@ import {
   getDoc,
   deleteDoc,
 } from 'firebase/firestore';
-import {
-  ref,
-  uploadBytesResumable,
-  getDownloadURL,
-  deleteObject,
-} from 'firebase/storage';
-import { db, storage } from './firebase';
+import { db } from './firebase';
+
+// ─── Cloudinary config ────────────────────────────────────────────────────────
+const CLOUD_NAME = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME!;
+const UPLOAD_PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!;
 
 export interface Memory {
   id: string;
@@ -49,28 +47,67 @@ export interface Comment {
   createdAt: { seconds: number; nanoseconds: number } | null;
 }
 
+// ─── Client-side image compression (canvas, no library needed) ────────────────
+async function compressImage(file: File, maxPx = 1600, quality = 0.82): Promise<File> {
+  if (!file.type.startsWith('image/')) return file;
+  return new Promise((resolve) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const scale = Math.min(1, maxPx / Math.max(img.width, img.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      const ctx = canvas.getContext('2d')!;
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) { resolve(file); return; }
+          resolve(new File([blob], file.name, { type: 'image/jpeg' }));
+        },
+        'image/jpeg',
+        quality
+      );
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
+    img.src = url;
+  });
+}
+
+// ─── Cloudinary upload (unsigned, free tier) ───────────────────────────────────
 export async function uploadFile(
   file: File,
-  uid: string,
+  _uid: string,
   onProgress?: (progress: number) => void
 ): Promise<string> {
-  const ext = file.name.split('.').pop();
-  const storageRef = ref(storage, `memories/${uid}/${Date.now()}.${ext}`);
-  const uploadTask = uploadBytesResumable(storageRef, file);
+  // Compress images before uploading to save Cloudinary quota
+  const toUpload = file.type.startsWith('image/') ? await compressImage(file) : file;
+
+  const formData = new FormData();
+  formData.append('file', toUpload);
+  formData.append('upload_preset', UPLOAD_PRESET);
+  formData.append('folder', 'hostel-chronicles');
 
   return new Promise((resolve, reject) => {
-    uploadTask.on(
-      'state_changed',
-      (snapshot) => {
-        const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-        onProgress?.(progress);
-      },
-      (error) => reject(error),
-      async () => {
-        const url = await getDownloadURL(uploadTask.snapshot.ref);
-        resolve(url);
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/auto/upload`);
+
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) onProgress?.((e.loaded / e.total) * 100);
+    };
+
+    xhr.onload = () => {
+      if (xhr.status === 200) {
+        const data = JSON.parse(xhr.responseText);
+        resolve(data.secure_url as string);
+      } else {
+        reject(new Error(`Cloudinary upload failed: ${xhr.status} ${xhr.responseText}`));
       }
-    );
+    };
+
+    xhr.onerror = () => reject(new Error('Network error during upload'));
+    xhr.send(formData);
   });
 }
 
@@ -164,19 +201,14 @@ export async function getComments(memId: string): Promise<Comment[]> {
   return snapshot.docs.map((d) => ({ id: d.id, ...d.data() })) as Comment[];
 }
 
-export async function deleteMemory(memId: string, fileUrl?: string): Promise<void> {
+export async function deleteMemory(memId: string, _fileUrl?: string): Promise<void> {
   // Delete the Firestore document
   await deleteDoc(doc(db, 'memories', memId));
 
-  // Delete the storage file if one exists
-  if (fileUrl) {
-    try {
-      const fileRef = ref(storage, fileUrl);
-      await deleteObject(fileRef);
-    } catch {
-      // File may already be deleted or URL may not be a storage URL — ignore
-    }
-  }
+  // Note: Cloudinary file deletion requires a signed API call from a backend.
+  // For a free-tier client-only app the asset stays in Cloudinary (25 GB free).
+  // If you later add a Next.js API route or server action, call:
+  //   POST https://api.cloudinary.com/v1_1/<cloud>/destroy  (signed)
 
   // Delete all associated comments
   const commentsQ = query(collection(db, 'comments'), where('memId', '==', memId));
